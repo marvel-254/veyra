@@ -9,7 +9,9 @@ interface ApiResponse<T> {
   error?: string;
 }
 
-interface Movie {
+// ── Core Types ───────────────────────────────────────────────
+
+export interface Movie {
   id: number;
   title: string;
   slug: string;
@@ -55,13 +57,13 @@ interface Movie {
   updatedAt: string;
 }
 
-interface Genre {
+export interface Genre {
   id: number;
   name: string;
   slug: string;
 }
 
-interface SeriesInfo {
+export interface SeriesInfo {
   id: number;
   movieId: number;
   totalSeasons: number;
@@ -69,7 +71,7 @@ interface SeriesInfo {
   status: string;
 }
 
-interface Season {
+export interface Season {
   id: number;
   seriesId: number;
   seasonNumber: number;
@@ -78,7 +80,7 @@ interface Season {
   episodes?: Episode[];
 }
 
-interface Episode {
+export interface Episode {
   id: number;
   seasonId: number;
   episodeNumber: number;
@@ -88,7 +90,7 @@ interface Episode {
   thumbnailUrl?: string;
 }
 
-interface MediaFile {
+export interface MediaFile {
   id: number;
   movieId?: number;
   episodeId?: number;
@@ -98,93 +100,48 @@ interface MediaFile {
   downloadEnabled: boolean;
 }
 
-interface User {
-  id: number;
-  email: string;
-  username: string;
-  displayName?: string;
-  avatarUrl?: string;
-  role: string;
-  emailVerified?: boolean;
-  createdAt?: string;
-}
-
-interface Pagination {
+export interface Pagination {
   page: number;
   limit: number;
   total: number;
   totalPages: number;
 }
 
-interface WatchProgress {
-  id: number;
-  movieId?: number;
-  episodeId?: number;
-  position: number;
-  duration: number;
-  completed: boolean;
-  updatedAt: string;
+// ── Download Types ──────────────────────────────────────────
+
+export interface DownloadQuality {
+  label: string;
+  value: string;
+  sizeEstimate?: string;
 }
 
-// Optional async source of the auth token (the Firebase ID token). Registered
-// by the client auth layer so every request resolves a fresh token.
-let tokenProvider: (() => Promise<string | null>) | null = null;
-
-export function setTokenProvider(fn: (() => Promise<string | null>) | null) {
-  tokenProvider = fn;
+export interface DownloadTask {
+  taskId: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  progress?: number;
+  estimatedTime?: number;
+  url?: string;
+  expiresAt?: string;
+  error?: string;
+  quality?: string;
+  fileSize?: number;
 }
 
-export function clearLegacySession() {
-  if (typeof window !== 'undefined') {
-    try {
-      window.localStorage.removeItem('veyra-access-token');
-    } catch {
-      // ignore
-    }
-  }
-}
+// ── Mock fallback ────────────────────────────────────────────
 
 class ApiClient {
   private baseUrl: string;
-  private accessToken: string | null = null;
   private mockWarned = false;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
-    // Restore any persisted token (legacy sessions / mock mode)
-    if (typeof window !== 'undefined') {
-      try {
-        this.accessToken = window.localStorage.getItem('veyra-access-token');
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  setAccessToken(token: string | null) {
-    this.accessToken = token;
-    if (typeof window !== 'undefined') {
-      try {
-        if (token) {
-          window.localStorage.setItem('veyra-access-token', token);
-        } else {
-          window.localStorage.removeItem('veyra-access-token');
-        }
-      } catch {
-        // ignore
-      }
-    }
   }
 
   isMockFallback() {
     return MOCK_FALLBACK;
   }
 
-  // Public request method for use by other services
-  async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     if (!MOCK_FALLBACK) {
       return this.realRequest<T>(endpoint, options);
     }
@@ -192,7 +149,6 @@ class ApiClient {
     try {
       return await this.realRequest<T>(endpoint, options);
     } catch (err) {
-      // Fall back to the in-browser mock backend on any failure.
       if (!this.mockWarned) {
         console.warn(
           '[Veyra] API unreachable — falling back to in-browser mock data. ' +
@@ -216,16 +172,10 @@ class ApiClient {
       ...((options.headers as Record<string, string>) || {}),
     };
 
-    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const isFormData =
+      typeof FormData !== 'undefined' && options.body instanceof FormData;
     if (!isFormData && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json';
-    }
-
-    // Resolve the bearer token: explicit token (mock/legacy) or the
-    // Firebase ID token provider registered by the auth layer.
-    const token = this.accessToken || (tokenProvider ? await tokenProvider() : null);
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
     }
 
     const response = await fetch(url, {
@@ -241,21 +191,8 @@ class ApiClient {
     return response.json();
   }
 
-  // ── Auth (Firebase) ──────────────────────────────────────────────────
-  // Sign-in/sign-up happen in the Firebase SDK; this endpoint exchanges the
-  // resulting ID token for the Veyra user (creating/linking the account).
-  async exchangeFirebaseToken(idToken: string) {
-    return this.request<{ user: User; isNewUser: boolean }>('/api/auth/firebase', {
-      method: 'POST',
-      body: JSON.stringify({ idToken }),
-    });
-  }
+  // ── Movies ─────────────────────────────────────────────────
 
-  async getMe() {
-    return this.request<{ user: User }>('/api/auth/me');
-  }
-
-  // Movies
   async getMovies(params?: {
     page?: number;
     limit?: number;
@@ -286,7 +223,8 @@ class ApiClient {
     return this.request<{ movie: Movie }>(`/api/movies/${slug}`);
   }
 
-  // Search
+  // ── Search ─────────────────────────────────────────────────
+
   async search(query: string, params?: { page?: number; limit?: number }) {
     const searchParams = new URLSearchParams({ q: query });
     if (params?.page) searchParams.set('page', String(params.page));
@@ -305,161 +243,80 @@ class ApiClient {
     );
   }
 
-  // Genres
+  // ── Genres ─────────────────────────────────────────────────
+
   async getGenres() {
     return this.request<{ genres: Genre[] }>('/api/genres');
   }
 
-  // Watch
-  async getWatchProgress() {
-    return this.request<{ progress: WatchProgress[] }>('/api/watch/progress');
-  }
+  // ── Download (yt-dlp via Cloudflare Worker) ──────────────────
 
-  async updateWatchProgress(data: {
-    movieId?: number;
-    episodeId?: number;
-    position: number;
-    duration: number;
-  }) {
-    return this.request<{ success: boolean }>('/api/watch/progress', {
+  /**
+   * Get available download qualities for a YouTube URL.
+   * Returns a list of quality options with estimated file sizes.
+   */
+  async getDownloadQualities(url: string) {
+    return this.request<{ qualities: DownloadQuality[] }>('/api/download/qualities', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ url }),
     });
   }
 
-  async getWatchHistory() {
-    return this.request<{
-      history: Array<{
-        id: number;
-        movieId: number;
-        episodeId?: number;
-        watchedAt: string;
-        progress: number;
-        movie: Movie;
-      }>;
-    }>('/api/watch/history');
+  /**
+   * Initiate a video download via yt-dlp.
+   * Returns a task ID for polling download status.
+   */
+  async startDownload(params: {
+    url: string;
+    movieId?: number;
+    quality?: string;
+    title?: string;
+  }) {
+    return this.request<DownloadTask>('/api/download', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   }
+
+  /**
+   * Poll the status of an in-progress or completed download.
+   */
+  async getDownloadStatus(taskId: string) {
+    return this.request<DownloadTask>(`/api/download/${taskId}`);
+  }
+
+  /**
+   * Cancel an in-progress download task.
+   */
+  async cancelDownload(taskId: string) {
+    return this.request<{ success: boolean }>(`/api/download/${taskId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Get the list of in-progress download tasks.
+   */
+  async getDownloadTasks() {
+    return this.request<{ tasks: DownloadTask[] }>('/api/download/tasks');
+  }
+
+  // ── Streaming ─────────────────────────────────────────────────
 
   async getStreamingUrl(movieId: number, quality = '1080') {
     return this.request<{
       movieId: number;
       quality: string;
       streamingUrl: string;
-      expiresAt: string;
+      contentType?: string;
+      fileSize?: number;
+      duration?: number;
     }>(`/api/watch/streaming-url/${movieId}?quality=${quality}`);
   }
 
-  // Watchlist
-  async getWatchlist() {
-    return this.request<{
-      watchlist: Array<{ id: number; addedAt: string; movie: Movie }>;
-    }>('/api/watch/watchlist');
-  }
+  // ── TMDB Discovery ──────────────────────────────────────────
 
-  async addToWatchlist(movieId: number) {
-    return this.request<{ success: boolean }>('/api/watch/watchlist', {
-      method: 'POST',
-      body: JSON.stringify({ movieId }),
-    });
-  }
-
-  async removeFromWatchlist(movieId: number) {
-    return this.request<{ success: boolean }>(
-      `/api/watch/watchlist/${movieId}`,
-      { method: 'DELETE' }
-    );
-  }
-
-  // ── Ratings & Reviews ──────────────────────────────────────────
-
-  async getMovieRatings(movieId: number) {
-    return this.request<{
-      ratings: Array<{
-        id: number;
-        rating: number;
-        review?: string;
-        createdAt: string;
-        updatedAt: string;
-        userId: number;
-        username: string;
-        displayName?: string;
-        avatarUrl?: string;
-      }>;
-      stats: { average: number; total: number };
-      userRating: { id: number; rating: number; review?: string } | null;
-    }>(`/api/ratings/movie/${movieId}`);
-  }
-
-  async submitRating(data: { movieId: number; rating: number; review?: string }) {
-    return this.request<{ success: boolean; updated: boolean }>('/api/ratings', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async deleteRating(movieId: number) {
-    return this.request<{ success: boolean }>(
-      `/api/ratings/${movieId}`,
-      { method: 'DELETE' }
-    );
-  }
-
-  async getUserRatings(limit = 50) {
-    return this.request<{
-      ratings: Array<{
-        id: number;
-        rating: number;
-        review?: string;
-        createdAt: string;
-        movie: {
-          id: number;
-          title: string;
-          slug: string;
-          posterUrl?: string;
-          year?: number;
-          type: string;
-        };
-      }>;
-    }>(`/api/ratings/user?limit=${limit}`);
-  }
-
-  // ── Profile ─────────────────────────────────────────────────────
-
-  async updateProfile(data: { displayName?: string; avatarUrl?: string }) {
-    return this.request<{ user: User }>('/api/auth/profile', {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // ── Offline Queue ──────────────────────────────────────────────
-
-  async flushOfflineQueue() {
-    try {
-      const { getQueuedRequests, removeQueuedRequest } = await import('@/lib/offline-store');
-      const queued = await getQueuedRequests();
-      for (const req of queued) {
-        try {
-          await this.realRequest(req.endpoint, {
-            method: req.method,
-            body: req.body,
-          });
-          await removeQueuedRequest(req.id);
-        } catch {
-          // Keep in queue if still failing
-        }
-      }
-    } catch {
-      // offline-store unavailable
-    }
-  }
-
-  // ── TMDB Discovery ──────────────────────────────────────────────
-
-  async discoverySearch(query: string, params?: {
-    page?: number;
-    media_type?: string;
-  }) {
+  async discoverySearch(query: string, params?: { page?: number; media_type?: string }) {
     const searchParams = new URLSearchParams({ q: query });
     if (params?.page) searchParams.set('page', String(params.page));
     if (params?.media_type) searchParams.set('media_type', params.media_type);
@@ -487,15 +344,11 @@ class ApiClient {
   }
 
   async getDiscoveryMovie(tmdbId: number) {
-    return this.request<DiscoveryMovieDetail>(
-      `/api/discovery/movie/${tmdbId}`
-    );
+    return this.request<DiscoveryMovieDetail>(`/api/discovery/movie/${tmdbId}`);
   }
 
   async getDiscoveryTV(tmdbId: number) {
-    return this.request<DiscoveryTVDetail>(
-      `/api/discovery/tv/${tmdbId}`
-    );
+    return this.request<DiscoveryTVDetail>(`/api/discovery/tv/${tmdbId}`);
   }
 
   async getMovieRecommendations(tmdbId: number) {
@@ -515,44 +368,9 @@ class ApiClient {
       '/api/discovery/genres'
     );
   }
-
-  // ── Admin TMDB ──────────────────────────────────────────────────
-
-  async adminSearchTMDB(query: string, mediaType = 'multi', page = 1) {
-    return this.request<TMDBAdminSearchResult>(
-      '/api/admin/tmdb/search',
-      {
-        method: 'POST',
-        body: JSON.stringify({ query, mediaType, page }),
-      }
-    );
-  }
-
-  async adminImportTMDB(tmdbId: number, mediaType: string) {
-    return this.request<TMDBImportResult>(
-      '/api/admin/tmdb/import',
-      {
-        method: 'POST',
-        body: JSON.stringify({ tmdbId, mediaType }),
-      }
-    );
-  }
-
-  async adminRefreshTMDB(movieId: number) {
-    return this.request<{ success: boolean; refreshedAt: string }>(
-      `/api/admin/tmdb/refresh/${movieId}`,
-      { method: 'POST' }
-    );
-  }
-
-  async adminCheckTMDB(tmdbId: number, mediaType = 'movie') {
-    return this.request<{ imported: boolean; movie: Movie | null }>(
-      `/api/admin/tmdb/check/${tmdbId}?media_type=${mediaType}`
-    );
-  }
 }
 
-// ── Discovery Types ──────────────────────────────────────────────
+// ── Discovery Types ─────────────────────────────────────────
 
 export interface DiscoveryItem {
   tmdbId: number;
@@ -634,19 +452,5 @@ export interface DiscoveryTVDetail extends DiscoveryMovieDetail {
   }>;
 }
 
-export interface TMDBAdminSearchResult {
-  results: Array<DiscoveryItem & { posterUrl?: string; backdropUrl?: string }>;
-  query: string;
-  page: number;
-}
-
-export interface TMDBImportResult {
-  movie: Movie;
-  tmdbId: number;
-  mediaType: string;
-  imported: boolean;
-}
-
-// Export singleton instance
+export type { Season, Episode, Pagination };
 export const api = new ApiClient(API_URL);
-export type { Movie, Genre, Season, Episode, User, WatchProgress, Pagination };

@@ -47,8 +47,6 @@ export default function HomePage() {
   const [tmdbPopularMovies, setTmdbPopularMovies] = useState<DiscoveryItem[]>([]);
   const [tmdbPopularTV, setTmdbPopularTV] = useState<DiscoveryItem[]>([]);
 
-  const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>([]);
-
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -84,70 +82,10 @@ export default function HomePage() {
       }
     };
 
-    const fetchContinueWatching = async () => {
-      try {
-        await api.getMe();
-        const { progress } = await api.getWatchProgress();
-        const incomplete = progress
-          .filter((p) => !p.completed && p.movieId)
-          .reduce<ContinueWatchingItem[]>((acc, p) => {
-            if (!acc.find((a) => a.movieId === p.movieId)) {
-              acc.push({
-                movieId: p.movieId!,
-                position: p.position,
-                duration: p.duration,
-                completed: p.completed,
-                updatedAt: p.updatedAt,
-              });
-            }
-            return acc;
-          }, [])
-          .slice(0, 6);
-
-        if (incomplete.length > 0) {
-          const movies = await Promise.allSettled(
-            incomplete.map(async (item) => {
-              const allMovies = await api.getMovies({ limit: 50 });
-              const movie = allMovies.movies.find((m) => m.id === item.movieId);
-              return { ...item, movie: movie || undefined };
-            })
-          );
-          setContinueWatching(
-            movies
-              .filter(
-                (m): m is PromiseFulfilledResult<
-                  Omit<ContinueWatchingItem, 'movie'> & { movie: Movie | undefined }
-                > => m.status === 'fulfilled'
-              )
-              .map((m) => m.value)
-          );
-        }
-      } catch {
-        // Not authenticated or API error
-      }
-    };
-
     fetchData();
     fetchDiscovery();
-    fetchContinueWatching();
     setLoading(false);
   }, []);
-
-  const formatRemaining = (position: number, duration: number) => {
-    const remaining = duration - position;
-    if (remaining <= 0) return 'Complete';
-    const hours = Math.floor(remaining / 3600);
-    const minutes = Math.floor((remaining % 3600) / 60);
-    if (hours > 0) return `${hours}h ${minutes}m left`;
-    return `${minutes}m left`;
-  };
-
-  const formatDuration = (seconds?: number) => {
-    if (!seconds) return '';
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-  };
 
   return (
     <div className="min-h-screen">
@@ -169,71 +107,6 @@ export default function HomePage() {
           ) : tmdbTrending.length > 0 ? (
             <DiscoveryRow title="Trending Today" items={tmdbTrending} size="md" />
           ) : null}
-
-          {/* ── Continue Watching ─────────────────────────────── */}
-          {continueWatching.length > 0 && (
-            <section className="mb-12 md:mb-16">
-              <h2 className="font-headline-md text-lg md:text-xl text-white font-semibold mb-5">
-                Continue Watching
-              </h2>
-              <div className="flex gap-3 md:gap-4 overflow-x-auto hide-scrollbar pb-2 snap-x snap-mandatory">
-                {continueWatching.map((item) => {
-                  const progressPct =
-                    item.duration > 0
-                      ? Math.min((item.position / item.duration) * 100, 100)
-                      : 0;
-                  return (
-                    <a
-                      key={item.movieId}
-                      href={`/movie/${item.movie?.slug || item.movieId}`}
-                      className="group min-w-[280px] w-[280px] md:min-w-[320px] md:w-[320px] snap-start flex-shrink-0"
-                    >
-                      <div className="relative h-44 rounded-xl overflow-hidden bg-surface-container">
-                        {item.movie?.backdropUrl ? (
-                          <img
-                            src={item.movie.backdropUrl}
-                            alt={item.movie.title}
-                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-surface-container" />
-                        )}
-
-                        {/* Play overlay */}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 flex items-center justify-center">
-                          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all duration-300">
-                            <span className="text-white text-lg ml-0.5">▶</span>
-                          </div>
-                        </div>
-
-                        {/* Progress bar at bottom */}
-                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
-                          <div
-                            className="h-full bg-primary transition-all duration-300"
-                            style={{ width: `${progressPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="px-1 pt-3">
-                        <h3 className="text-white font-semibold text-sm truncate group-hover:text-primary transition-colors">
-                          {item.movie?.title || 'Unknown'}
-                        </h3>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-on-surface-variant text-xs">
-                            {formatDuration(item.movie?.duration)}
-                          </span>
-                          <span className="text-on-surface-variant text-xs">
-                            {formatRemaining(item.position, item.duration)}
-                          </span>
-                        </div>
-                      </div>
-                    </a>
-                  );
-                })}
-              </div>
-            </section>
-          )}
 
           {/* ── Trending Now ─────────────────────────────────── */}
           {loading ? (

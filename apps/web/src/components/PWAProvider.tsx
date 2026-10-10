@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Download, RefreshCw, WifiOff, X } from 'lucide-react';
-import { api } from '@/lib/api';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -42,15 +41,12 @@ export default function PWAProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      void api.flushOfflineQueue();
     };
     const handleOffline = () => setIsOnline(false);
 
     setIsOnline(navigator.onLine);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
-    if (navigator.onLine) void api.flushOfflineQueue();
 
     return () => {
       window.removeEventListener('online', handleOnline);

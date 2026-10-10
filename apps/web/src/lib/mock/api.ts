@@ -782,6 +782,58 @@ export async function mockRequest(
     return { health: { status: 'connected', message: 'Connection OK', lastChecked: new Date().toISOString(), latencyMs: 34 + Math.floor(Math.random() * 20) } };
   }
 
+  // ── Download (yt-dlp mock) ──────────────────────────────────────────────────
+  if (path === '/api/download/qualities' && method === 'POST') {
+    const { url } = options.body || {};
+    if (!url) {
+      const err = new Error('URL is required') as Error & { status?: number };
+      err.status = 400;
+      throw err;
+    }
+    return {
+      qualities: [
+        { label: '1080p', value: '1080p', sizeEstimate: '~1.2 GB' },
+        { label: '720p', value: '720p', sizeEstimate: '~650 MB' },
+        { label: '480p', value: '480p', sizeEstimate: '~350 MB' },
+      ],
+    };
+  }
+
+  if (path === '/api/download' && method === 'POST') {
+    const { url, quality } = options.body || {};
+    if (!url) {
+      const err = new Error('URL is required') as Error & { status?: number };
+      err.status = 400;
+      throw err;
+    }
+    // Simulate an immediately completed download (demo mode)
+    return {
+      taskId: `mock_${uid()}`,
+      status: 'completed',
+      url: DEMO_HLS, // demo HLS stream as mock download URL
+      quality: quality || '1080p',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
+
+  const downloadStatusMatch = path.match(/^\/api\/download\/(mock_\w+)$/);
+  if (downloadStatusMatch && method === 'GET') {
+    return {
+      taskId: downloadStatusMatch[1],
+      status: 'completed',
+      url: DEMO_HLS,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
+
+  if (downloadStatusMatch && method === 'DELETE') {
+    return { success: true };
+  }
+
+  if (path === '/api/download/tasks' && method === 'GET') {
+    return { tasks: [] };
+  }
+
   // ── Fallback ─────────────────────────────────────────────────────────────
   const err = new Error(`Mock API: no handler for ${method} ${path}`) as Error & { status?: number };
   err.status = 404;

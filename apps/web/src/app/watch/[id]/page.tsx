@@ -5,6 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import VideoPlayer from '@/components/VideoPlayer';
 import { api, type Movie } from '@/lib/api';
+import {
+  saveProgress,
+  getProgress,
+  type LocalProgress,
+} from '@/lib/local-progress';
+
+const SAVE_DEBOUNCE_MS = 5_000; // save every 5 seconds
 
 export default function WatchPage() {
   const params = useParams();
@@ -18,82 +25,68 @@ export default function WatchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Fetch movie details + streaming URL ─────────────────────
+  // ── Restore local progress on mount ─────────────────────────
   useEffect(() => {
-    const fetchData = async () => {
+    if (!movieId) return;
+    const saved: LocalProgress | null = getProgress(movieId);
+    if (saved && saved.position > 0 && !saved.completed) {
+      setInitialPosition(saved.position);
+    }
+  }, [movieId]);
+
+  // ── Fetch streaming URL ─────────────────────────────────────
+  useEffect(() => {
+    const fetchStream = async () => {
       try {
-        const [streamData, progressData] = await Promise.allSettled([
-          api.getStreamingUrl(movieId, quality),
-          api.getWatchProgress(),
-        ]);
-
-        if (streamData.status === 'fulfilled') {
-          setStreamingUrl(streamData.value.streamingUrl);
-        } else {
-          throw new Error(streamData.reason?.message || 'Failed to load video');
-        }
-
-        // Restore watch progress
-        if (progressData.status === 'fulfilled') {
-          const progress = progressData.value.progress.find(
-            (p) => p.movieId === movieId && !p.completed
-          );
-          if (progress && progress.position > 0) {
-            setInitialPosition(progress.position);
-          }
-        }
+        const data = await api.getStreamingUrl(movieId, quality);
+        setStreamingUrl(data.streamingUrl);
       } catch (err: any) {
-        setError(err.message || 'Failed to load video');
+        setError(
+          err?.message || 'Streaming is not available for this title.'
+        );
       } finally {
         setLoading(false);
       }
     };
 
-    if (movieId) fetchData();
+    if (movieId) fetchStream();
   }, [movieId, quality]);
 
   // ── Fetch movie metadata for the title overlay ──────────────
   useEffect(() => {
     const fetchMovie = async () => {
       try {
-        // Try to get movie by ID through the search endpoint
         const res = await api.getMovies({ limit: 50 });
         const found = res.movies.find((m) => m.id === movieId);
         if (found) setMovie(found);
       } catch {
-        // Movie info not critical for playback
+        // Not critical — movie data is purely decorative here.
       }
     };
     if (movieId) fetchMovie();
   }, [movieId]);
 
-  // ── Progress saving callback ────────────────────────────────
+  // ── Save progress locally ────────────────────────────────────
   const handleProgress = useCallback(
-    async (position: number, duration: number) => {
-      if (!movieId || position <= 0) return;
-      try {
-        await api.updateWatchProgress({
-          movieId,
-          position,
-          duration,
-        });
-      } catch {
-        // Silently fail — don't interrupt playback
-      }
+    (position: number, duration: number) => {
+      if (!movieId || position <= 0 || duration <= 0) return;
+      saveProgress(movieId, position, duration);
     },
     [movieId]
   );
 
-  // ── Quality change handler ──────────────────────────────────
-  const handleQualityChange = useCallback((q: string) => {
-    // Save current position before switching
-    const video = document.querySelector('video');
-    const currentPosition = video?.currentTime || 0;
-    setInitialPosition(currentPosition);
-    setQuality(q);
-  }, []);
+  // ── Quality change handler ───────────────────────────────────
+  const handleQualityChange = useCallback(
+    (q: string) => {
+      const video = document.querySelector('video');
+      const currentPosition = video?.currentTime || 0;
+      setInitialPosition(currentPosition);
+      setQuality(q);
+    },
+    []
+  );
 
-  // ── Back navigation ────────────────────────────────────────
+  // ── Back navigation ─────────────────────────────────────────
   const handleBack = useCallback(() => {
     if (movie?.slug) {
       router.push(`/movie/${movie.slug}`);
@@ -101,27 +94,6 @@ export default function WatchPage() {
       router.back();
     }
   }, [movie, router]);
-
-  // ── Save progress on unload ────────────────────────────────
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      const video = document.querySelector('video');
-      if (video && movieId && video.currentTime > 0) {
-        const data = JSON.stringify({
-          movieId,
-          position: Math.floor(video.currentTime),
-          duration: Math.floor(video.duration),
-        });
-        navigator.sendBeacon(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'}/api/watch/progress`,
-          new Blob([data], { type: 'application/json' })
-        );
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [movieId]);
 
   // ── Loading state ──────────────────────────────────────────
   if (loading) {
@@ -135,7 +107,7 @@ export default function WatchPage() {
     );
   }
 
-  // ── Error state ────────────────────────────────────────────
+  // ── Error state ─────────────────────────────────────────────
   if (error) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4 px-6">
@@ -152,7 +124,7 @@ export default function WatchPage() {
     );
   }
 
-  // ── Player ─────────────────────────────────────────────────
+  // ── Player ──────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-black">
       {streamingUrl ? (
