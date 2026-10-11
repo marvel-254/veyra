@@ -8,7 +8,10 @@
     "ENVIRONMENT": "development",
     "CORS_ORIGIN": "http://localhost:3000,capacitor://localhost,https://localhost",
     // yt-dlp download service (Render Docker service) — set per-env below
-    "YT_DLP_SERVICE_URL": "http://localhost:8000"
+    "YT_DLP_SERVICE_URL": "http://localhost:8000",
+    // TMDB Read Access Token — placeholder only. Set the real value via
+    // `wrangler secret put TMDB_API_READ_ACCESS_TOKEN`. Never commit the real token.
+    "TMDB_API_READ_ACCESS_TOKEN": "YOUR_TMDB_TOKEN_HERE"
   },
   // R2 Bucket Binding
   "r2_buckets": [

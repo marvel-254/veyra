@@ -6,6 +6,7 @@ import { watchRoutes } from './routes/watch';
 import { genreRoutes } from './routes/genres';
 import { discoveryRoutes } from './routes/discovery';
 import { downloadRoutes } from './routes/download';
+import { sourceRoutes } from './routes/sources';
 
 // Environment bindings
 export interface Env {
@@ -61,6 +62,7 @@ app.route('/api/genres', genreRoutes);
 app.route('/api/discovery', discoveryRoutes);
 app.route('/api/watch', watchRoutes);
 app.route('/api/download', downloadRoutes);
+app.route('/api/sources', sourceRoutes);
 
 // 404 handler
 app.notFound((c) => c.json({ error: 'Not found' }, 404));

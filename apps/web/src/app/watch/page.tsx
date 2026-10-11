@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import VideoPlayer from '@/components/VideoPlayer';
+import VideoPlayer, { type StreamSource } from '@/components/VideoPlayer';
 import { api, type Movie } from '@/lib/api';
 import {
   saveProgress,
@@ -11,16 +11,14 @@ import {
   type LocalProgress,
 } from '@/lib/local-progress';
 
-const SAVE_DEBOUNCE_MS = 5_000; // save every 5 seconds
-
 function WatchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const movieId = parseInt(searchParams.get('id') || '', 10);
 
   const [movie, setMovie] = useState<Movie | null>(null);
-  const [streamingUrl, setStreamingUrl] = useState<string | null>(null);
-  const [quality, setQuality] = useState('1080');
+  const [sources, setSources] = useState<StreamSource[]>([]);
+  const [activeSourceIndex, setActiveSourceIndex] = useState(0);
   const [initialPosition, setInitialPosition] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,12 +32,12 @@ function WatchContent() {
     }
   }, [movieId]);
 
-  // ── Fetch streaming URL ─────────────────────────────────────
+  // ── Fetch streaming sources (ranked array) ────────────────────
   useEffect(() => {
-    const fetchStream = async () => {
+    const fetchSources = async () => {
       try {
-        const data = await api.getStreamingUrl(movieId, quality);
-        setStreamingUrl(data.streamingUrl);
+        const data = await api.getStreamingSources(movieId);
+        setSources(data.sources || []);
       } catch (err: any) {
         setError(
           err?.message || 'Streaming is not available for this title.'
@@ -49,10 +47,10 @@ function WatchContent() {
       }
     };
 
-    if (movieId) fetchStream();
-  }, [movieId, quality]);
+    if (movieId) fetchSources();
+  }, [movieId]);
 
-  // ── Fetch movie metadata for the title overlay ──────────────
+  // ── Fetch movie metadata ─────────────────────────────────────
   useEffect(() => {
     const fetchMovie = async () => {
       try {
@@ -60,13 +58,13 @@ function WatchContent() {
         const found = res.movies.find((m) => m.id === movieId);
         if (found) setMovie(found);
       } catch {
-        // Not critical — movie data is purely decorative here.
+        // Not critical
       }
     };
     if (movieId) fetchMovie();
   }, [movieId]);
 
-  // ── Save progress locally ────────────────────────────────────
+  // ── Save progress ────────────────────────────────────────────
   const handleProgress = useCallback(
     (position: number, duration: number) => {
       if (!movieId || position <= 0 || duration <= 0) return;
@@ -75,18 +73,16 @@ function WatchContent() {
     [movieId]
   );
 
-  // ── Quality change handler ───────────────────────────────────
-  const handleQualityChange = useCallback(
-    (q: string) => {
-      const video = document.querySelector('video');
-      const currentPosition = video?.currentTime || 0;
-      setInitialPosition(currentPosition);
-      setQuality(q);
-    },
-    []
-  );
+  // ── Handlers ────────────────────────────────────────────────
+  const activeSource = sources[activeSourceIndex];
 
-  // ── Back navigation ─────────────────────────────────────────
+  const handleSourceChange = (index: number) => {
+    const video = document.querySelector('video');
+    const currentPosition = video?.currentTime || 0;
+    setInitialPosition(currentPosition);
+    setActiveSourceIndex(index);
+  };
+
   const handleBack = useCallback(() => {
     if (movie?.slug) {
       router.push(`/movie?slug=${movie.slug}`);
@@ -126,32 +122,43 @@ function WatchContent() {
 
   // ── Player ──────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-black">
-      {streamingUrl ? (
+    <div className="min-h-screen bg-black relative">
+      {activeSource ? (
         <VideoPlayer
-          src={streamingUrl}
+          src={activeSource}
           title={movie?.title}
           posterUrl={movie?.backdropUrl || movie?.posterUrl}
-          quality={quality}
-          onQualityChange={handleQualityChange}
-          qualities={['480', '720', '1080']}
           onProgress={handleProgress}
           initialPosition={initialPosition}
           onBack={handleBack}
+          sourceLabel={activeSource.label}
         />
       ) : (
         <div className="w-full h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-on-surface-variant">Loading video...</p>
-          </div>
+          <p className="text-on-surface-variant">No sources available.</p>
+        </div>
+      )}
+
+      {/* ── Source Picker (shown if multiple sources) ──────────── */}
+      {sources.length > 1 && (
+        <div className="absolute top-20 right-4 z-50">
+          <select
+            className="bg-black/80 text-white px-3 py-2 rounded-lg text-sm border border-white/20 outline-none hover:bg-black"
+            value={activeSourceIndex}
+            onChange={(e) => handleSourceChange(parseInt(e.target.value))}
+          >
+            {sources.map((s, idx) => (
+              <option key={idx} value={idx}>
+                Source {idx + 1}: {s.label || s.url.substring(0, 20) + '...'}
+              </option>
+            ))}
+          </select>
         </div>
       )}
     </div>
   );
 }
 
-// useSearchParams requires a Suspense boundary for static export.
 export default function WatchPage() {
   return (
     <Suspense

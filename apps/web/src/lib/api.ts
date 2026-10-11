@@ -57,6 +57,17 @@ export interface Movie {
   updatedAt: string;
 }
 
+// ── Stream Source ──────────────────────────────────────────────
+
+export type StreamType = 'hls' | 'mp4' | 'dash' | 'youtube';
+
+export interface StreamSource {
+  url: string;
+  type?: StreamType;
+  quality?: string;
+  label?: string; // e.g. "1080p", "720p", "Auto"
+}
+
 export interface Genre {
   id: number;
   name: string;
@@ -303,15 +314,90 @@ class ApiClient {
 
   // ── Streaming ─────────────────────────────────────────────────
 
-  async getStreamingUrl(movieId: number, quality = '1080') {
-    return this.request<{
+  /**
+   * Best-effort stream-type inference from the URL, used when the API does not
+   * send an explicit `type` alongside the source.
+   */
+  private inferStreamType(url: string): StreamType {
+    const u = url.toLowerCase();
+    if (u.includes('.m3u8') || u.includes('mpegurl')) return 'hls';
+    if (u.includes('.mpd') || u.includes('dash+xml')) return 'dash';
+    if (u.includes('youtube.com') || u.includes('youtu.be') || u.includes('googlevideo.com')) {
+      return 'youtube';
+    }
+    return 'mp4';
+  }
+
+  /**
+   * Returns every playable source for a movie, ranked best-first by the API.
+   * Accepts both the current `{ sources: StreamSource[] }` payload and the
+   * legacy `{ streamingUrl: string }` single-URL payload, normalising the
+   * latter into a one-element array so callers only handle one shape.
+   */
+  async getStreamingSources(movieId: number, quality?: string) {
+    const query = quality ? `?quality=${encodeURIComponent(quality)}` : '';
+    const data = await this.request<{
       movieId: number;
-      quality: string;
-      streamingUrl: string;
+      sources?: StreamSource[];
+      // Legacy single-source fields.
+      streamingUrl?: string;
+      quality?: string;
       contentType?: string;
       fileSize?: number;
       duration?: number;
-    }>(`/api/watch/streaming-url/${movieId}?quality=${quality}`);
+    }>(`/api/watch/streaming-url/${movieId}${query}`);
+
+    // Preferred shape: the API already returned a ranked array.
+    if (Array.isArray(data.sources)) {
+      return {
+        movieId: data.movieId,
+        sources: data.sources.filter((s) => !!s?.url),
+        contentType: data.contentType,
+        fileSize: data.fileSize,
+        duration: data.duration,
+      };
+    }
+
+    // Legacy shape: wrap the single URL as one source.
+    if (data.streamingUrl) {
+      return {
+        movieId: data.movieId,
+        sources: [
+          {
+            url: data.streamingUrl,
+            type: this.inferStreamType(data.streamingUrl),
+            quality: data.quality,
+            label: data.quality ? `${data.quality}p` : undefined,
+          },
+        ],
+        contentType: data.contentType,
+        fileSize: data.fileSize,
+        duration: data.duration,
+      };
+    }
+
+    return { movieId: data.movieId, sources: [] };
+  }
+
+  /**
+   * Backwards-compatible single-URL lookup, kept for callers that still expect
+   * a bare URL. Delegates to getStreamingSources and returns the top-ranked
+   * source's URL (or null when the title has no playable stream).
+   */
+  async getStreamingUrl(movieId: number, quality = '1080') {
+    const { sources, contentType, fileSize, duration } = await this.getStreamingSources(
+      movieId,
+      quality,
+    );
+    const top = sources[0];
+    return {
+      movieId,
+      quality: top?.quality ?? quality,
+      streamingUrl: top?.url ?? '',
+      contentType,
+      fileSize,
+      duration,
+    };
   }
 
   // ── TMDB Discovery ──────────────────────────────────────────
