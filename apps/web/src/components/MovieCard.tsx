@@ -29,7 +29,7 @@ export default function MovieCard({ movie, size = 'md' }: MovieCardProps) {
   const rating = movie.voteAverage || movie.imdbRating;
 
   return (
-    <Link href={`/movie/${movie.slug}`} className="block group">
+    <Link href={`/movie?slug=${movie.slug}`} className="block group">
       <div
         className={`relative flex-shrink-0 snap-start transition-all duration-300 ${sizeClasses[size]}`}
       >

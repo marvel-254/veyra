@@ -132,14 +132,14 @@ export default function Hero({ movie }: HeroProps) {
           }`}
         >
           <Link
-            href={`/watch/${movie.id}`}
+            href={`/watch?id=${movie.id}`}
             className="group flex items-center gap-2.5 bg-white text-black font-bold px-7 py-3.5 rounded-lg hover:bg-white/90 transition-all duration-200 shadow-lg shadow-white/10"
           >
             <Play size={22} fill="black" className="text-black" />
             <span>Play</span>
           </Link>
           <Link
-            href={`/movie/${movie.slug}`}
+            href={`/movie?slug=${movie.slug}`}
             className="group flex items-center gap-2.5 bg-white/10 backdrop-blur-sm text-white font-bold px-7 py-3.5 rounded-lg border border-white/20 hover:bg-white/20 transition-all duration-200"
           >
             <Info size={22} />

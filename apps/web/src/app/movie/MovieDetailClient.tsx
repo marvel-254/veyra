@@ -2,13 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { Download, Play, Share2, Clock, Calendar, Star, ChevronDown, X, Loader2 } from 'lucide-react';
 import { api, type Movie, type DownloadTask, type DownloadQuality } from '@/lib/api';
 
 type DownloadStatus = 'idle' | 'queued' | 'processing' | 'saving' | 'completed' | 'failed';
 
-export default function MovieDetailClient({ slug }: { slug: string }) {
+export default function MovieDetailClient() {
+  const searchParams = useSearchParams();
+  const slug = searchParams.get('slug') || '';
+
   const [movie, setMovie] = useState<Movie | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +153,7 @@ export default function MovieDetailClient({ slug }: { slug: string }) {
 
   const handleShare = () => {
     if (!movie) return;
-    const url = `${window.location.origin}/movie/${movie.slug}`;
+    const url = `${window.location.origin}/movie?slug=${movie.slug}`;
     if (navigator.share) {
       navigator.share({ title: movie.title, text: movie.shortDescription, url });
     } else {

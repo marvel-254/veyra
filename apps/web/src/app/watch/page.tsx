@@ -89,7 +89,7 @@ function WatchContent() {
   // ── Back navigation ─────────────────────────────────────────
   const handleBack = useCallback(() => {
     if (movie?.slug) {
-      router.push(`/movie/${movie.slug}`);
+      router.push(`/movie?slug=${movie.slug}`);
     } else {
       router.back();
     }
@@ -115,7 +115,7 @@ function WatchContent() {
         <h1 className="text-2xl font-bold text-white">Playback Error</h1>
         <p className="text-on-surface-variant text-center max-w-md">{error}</p>
         <Link
-          href={movie?.slug ? `/movie/${movie.slug}` : '/'}
+          href={movie?.slug ? `/movie?slug=${movie.slug}` : '/'}
           className="bg-primary text-on-primary px-6 py-3 rounded-lg text-sm font-bold hover:bg-primary/90 transition-all"
         >
           {movie?.slug ? 'Back to Movie' : 'Back to Home'}
