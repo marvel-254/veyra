@@ -452,5 +452,4 @@ export interface DiscoveryTVDetail extends DiscoveryMovieDetail {
   }>;
 }
 
-export type { Season, Episode, Pagination };
 export const api = new ApiClient(API_URL);
