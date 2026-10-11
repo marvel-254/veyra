@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: veyra-ytdlp
+    env: docker
+    dockerfile: Dockerfile
+    plan: starter
+    envVars:
+      - key: PORT
+        value: "8000"

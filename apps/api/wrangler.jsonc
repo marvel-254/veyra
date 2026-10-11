@@ -6,8 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ENVIRONMENT": "development",
-    "FIREBASE_PROJECT_ID": "omix-systems-cd1af",
-    "ADMIN_EMAILS": ""
+    "CORS_ORIGIN": "http://localhost:3000,capacitor://localhost,https://localhost",
+    // yt-dlp download service (Render Docker service) — set per-env below
+    "YT_DLP_SERVICE_URL": "http://localhost:8000"
   },
   // R2 Bucket Binding
   "r2_buckets": [
@@ -24,7 +25,9 @@
   "env": {
     "staging": {
       "vars": {
-        "ENVIRONMENT": "staging"
+        "ENVIRONMENT": "staging",
+        "CORS_ORIGIN": "https://veyra.pages.dev,capacitor://localhost,https://localhost",
+        "YT_DLP_SERVICE_URL": "https://ytdlp-staging.onrender.com"
       },
       "r2_buckets": [
         {
@@ -36,7 +39,9 @@
     },
     "production": {
       "vars": {
-        "ENVIRONMENT": "production"
+        "ENVIRONMENT": "production",
+        "CORS_ORIGIN": "capacitor://localhost,https://localhost,https://marvel-254.github.io",
+        "YT_DLP_SERVICE_URL": "https://ytdlp-veyra.onrender.com"
       },
       "r2_buckets": [
         {

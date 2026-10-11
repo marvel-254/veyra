@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import VideoPlayer from '@/components/VideoPlayer';
 import { api, type Movie } from '@/lib/api';
@@ -13,10 +13,10 @@ import {
 
 const SAVE_DEBOUNCE_MS = 5_000; // save every 5 seconds
 
-export default function WatchPage() {
-  const params = useParams();
+function WatchContent() {
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const movieId = parseInt(params.id as string);
+  const movieId = parseInt(searchParams.get('id') || '', 10);
 
   const [movie, setMovie] = useState<Movie | null>(null);
   const [streamingUrl, setStreamingUrl] = useState<string | null>(null);
@@ -148,5 +148,20 @@ export default function WatchPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// useSearchParams requires a Suspense boundary for static export.
+export default function WatchPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black flex items-center justify-center">
+          <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <WatchContent />
+    </Suspense>
   );
 }

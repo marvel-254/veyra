@@ -603,4 +603,166 @@ hover: scale(1.05), border-primary/30, shadow-xl
 
 ---
 
-*Last updated: 2026-01-10 | Phase 2 complete — auth stripped, Capacitor init in progress*
+**Version:** 0.3.0  
+**Date:** 2026-10-11  
+**Status:** All code written, infrastructure ready. User must provide 2 secrets to activate.  
+**Goal:** Transform Veyra from a web PWA into a free, no-login Android APK with YouTube-powered download capability
+
+---
+
+## What's Built
+
+### Frontend (apps/web)
+- ✅ Firebase auth fully removed — no login, no signup anywhere
+- ✅ `MovieDetailPage` has two CTA buttons: **Watch** (streams in-app) and **Download** (saves video locally)
+- ✅ **Watch** routes to `/watch?id=<movieId>` — query-param route (static-export safe)
+- ✅ **Download** calls `POST /api/download` → proxied to yt-dlp Render service
+- ✅ `output: 'export'` in `next.config.ts` — Next.js builds to `out/` for APK bundling
+- ✅ Capacitor Android shell at `apps/web/android/` (initialized, staged in git)
+- ✅ `webDir: 'out'` in `capacitor.config.ts`
+- ✅ `npm run build --workspace=apps/web` = `next build` → static `out/` → APK bundle
+
+### API Worker (apps/api — Cloudflare Workers via Wrangler)
+- ✅ All auth routes deleted (auth.ts, admin.ts, ratings.ts, storage.ts)
+- ✅ `GET /api/watch/streaming-url/:movieId` — public, no auth
+- ✅ `POST /api/download` — proxied to yt-dlp Render service
+- ✅ `GET /api/download/:taskId` — proxy to yt-dlp status endpoint
+- ✅ `DELETE /api/download/:taskId` — cancel download
+- ✅ `POST /api/download/qualities` — returns quality options
+- ✅ Watch progress is now **localStorage-only** (no account needed)
+
+### yt-dlp Service (apps/ytdlp-service — Render Docker)
+- ✅ `Dockerfile` + `app.py` (FastAPI) — deploy to Render with `render.yaml`
+- ✅ POST `/download` → background yt-dlp → returns signed file URL
+- ✅ GET `/download/:taskId` → poll status
+- ✅ GET `/download/:taskId/file` → serve the MP4
+- ✅ DELETE `/download/:taskId` → cancel + clean up
+
+### CI/CD (GitHub Actions)
+- ✅ `.github/workflows/build-apk.yml` — runs on every push to main and every `v*` tag
+- ✅ Steps: `npm ci` → `next build` → `cap sync android` → `./gradlew assembleDebug`
+- ✅ Attaches APK artifact on PR/main; creates GitHub Release with APK on tag push
+
+### Vercel Landing Site (apps/landing)
+- ✅ `apps/landing/` — Next.js app
+- ✅ `/` — Hero landing with APK download button linking to latest GitHub Release
+- ✅ `/releases` — changelog fetched from GitHub Releases API
+
+---
+
+## Still Needed (User Action Required)
+
+### 1. Neon DB connection string (2 min setup)
+
+Go to **[console.neon.tech](https://console.neon.tech)** → project `veyra-db` → **Connection Details** →
+copy the **Connection string**. It looks like:
+
+```
+postgresql://<username>:<password>@ep-restless-art-b8gtnlfp.c-14.us-east-1.aws.neon.tech/veyra
+```
+
+Set it as a GitHub secret:
+
+```bash
+gh secret set DATABASE_URL --body "postgresql://..."
+```
+
+Set it as a Cloudflare Worker variable in the dashboard under **Settings → Variables**:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | the connection string from Neon console |
+
+### 2. GitHub Actions secrets (for signed APK builds)
+
+```bash
+gh secret set KEYSTORE_BASE64   # base64 of release.jks (optional — debug APK works without it)
+gh secret set KEYSTORE_PASSWORD  # keystore password
+gh secret set KEY_ALIAS         # key alias
+gh secret set KEY_PASSWORD      # key password
+gh secret set NEXT_PUBLIC_API_URL  # https://veyra-api.your-username.workers.dev
+```
+
+### 3. Cloudflare Workers deployment
+
+```bash
+cd apps/api && wrangler deploy
+```
+
+### 4. Render deployment for yt-dlp service
+
+```bash
+cd apps/ytdlp-service
+render deploy --token <your-render-token>
+# Or connect the GitHub repo in the Render dashboard and deploy from render.yaml
+```
+
+---
+
+## Environment Variables Summary
+
+| Variable | Where | Status |
+|---|---|---|
+| `DATABASE_URL` | CF Worker + GitHub Secret | ❌ User must set |
+| `TMDB_API_READ_ACCESS_TOKEN` | CF Worker | Ask user for TMDB token |
+| `YT_DLP_SERVICE_URL` | CF Worker + wrangler.jsonc | ✅ Defaults to localhost:8000 |
+| `NEXT_PUBLIC_API_URL` | GitHub Secret | ❌ User must set (worker URL) |
+| `CORS_ORIGIN` | CF Worker + wrangler.jsonc | ✅ Set per environment |
+
+---
+
+## Implementation Phases
+
+### Phase 1 ✅ — HANDOFF + Repo Setup
+- [x] Create HANDOFF.md
+- [x] Initialize GitHub repo (marvel-254/veyra)
+- [x] Push Phase 1 code
+
+### Phase 2 ✅ — Core Migration
+- [x] Remove Firebase auth from web app
+- [x] Remove auth routes from API
+- [x] Simplify database schema
+- [x] Remove unused pages (auth, profile, watchlist, admin)
+- [x] Test all flows work without login
+
+### Phase 3 ✅ — Capacitor Android
+- [x] Initialize Capacitor in the project
+- [x] Configure Android build settings
+- [x] Capacitor Android project committed to git
+- [x] Static export (`output: 'export') configured
+
+### Phase 4 ✅ — Download Engine
+- [x] yt-dlp FastAPI service (apps/ytdlp-service/app.py)
+- [x] Dockerfile for Render deployment
+- [x] `render.yaml` for Render Blueprints
+- [x] Cloudflare Worker download route proxying to yt-dlp service
+- [x] `POST /api/download`, `GET /api/download/:taskId`, `DELETE /api/download/:taskId`
+- [x] `POST /api/download/qualities`
+
+### Phase 5 ✅ — APK Polish
+- [x] Watch + Download buttons on movie detail page
+- [x] Watch page uses query params (`?id=`) for static export safety
+- [x] Download progress UI (queued/processing/completed/failed states)
+- [x] Quality picker dropdown
+
+### Phase 6 ✅ — Vercel Landing Site
+- [x] apps/landing/ — Next.js landing page
+- [x] `/` — hero with APK download CTA
+- [x] `/releases` — changelog from GitHub Releases API
+
+### Phase 7 ✅ — Release Pipeline
+- [x] `.github/workflows/build-apk.yml`
+- [x] APK built on every push + tag
+- [x] GitHub Release created on tag push
+- [x] Release notes include install instructions
+
+### Phase 8 ⏳ — User Action Required
+- [ ] Provide `DATABASE_URL` (Neon connection string)
+- [ ] Deploy Cloudflare Worker (`wrangler deploy`)
+- [ ] Deploy yt-dlp service (Render)
+- [ ] Deploy Vercel landing site
+- [ ] First production APK release
+
+---
+
+*Last updated: 2026-10-11 | Phase 8 pending — 2 secrets needed from user*
