@@ -91,7 +91,7 @@ function BrowseContent() {
             <button
               key={t.value}
               onClick={() => updateParam('type', t.value)}
-              className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 whitespace-nowrap min-h-[48px] ${
                 type === t.value
                   ? 'bg-primary text-on-primary shadow-lg shadow-primary/20'
                   : 'bg-surface-container text-on-surface-variant hover:text-white hover:bg-surface-container-high'
@@ -106,7 +106,7 @@ function BrowseContent() {
         <div className="flex gap-2 mb-10 flex-wrap">
           <button
             onClick={() => updateParam('genre', '')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 min-h-[48px] ${
               !activeGenre
                 ? 'bg-primary text-on-primary'
                 : 'bg-surface-container text-on-surface-variant hover:text-white hover:bg-surface-container-high'
@@ -118,7 +118,7 @@ function BrowseContent() {
             <button
               key={g.id}
               onClick={() => updateParam('genre', String(g.id))}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 min-h-[48px] ${
                 activeGenre === g.id
                   ? 'bg-primary text-on-primary'
                   : 'bg-surface-container text-on-surface-variant hover:text-white hover:bg-surface-container-high'
@@ -149,7 +149,7 @@ function BrowseContent() {
               onClick={() => {
                 router.replace('/browse');
               }}
-              className="mt-6 px-5 py-2.5 bg-primary text-on-primary rounded-lg text-sm font-bold hover:bg-primary/90 transition-all"
+              className="mt-6 px-5 py-2.5 bg-primary text-on-primary rounded-lg text-sm font-bold hover:bg-primary/90 transition-all min-h-[48px]"
             >
               Clear Filters
             </button>

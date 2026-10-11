@@ -73,7 +73,7 @@ export default function HelpPage() {
             href="https://github.com/marvel-254/veyra/issues"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-primary text-on-primary font-bold text-sm px-5 py-2.5 rounded-lg hover:bg-primary/90 transition-all"
+            className="inline-flex items-center gap-2 bg-primary text-on-primary font-bold text-sm px-5 py-2.5 rounded-lg hover:bg-primary/90 transition-all min-h-[48px]"
           >
             Open an Issue
           </a>

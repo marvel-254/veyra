@@ -6,6 +6,11 @@ import {
   Maximize, Minimize, SkipBack, SkipForward,
   Settings, ChevronLeft, Globe,
 } from 'lucide-react';
+import {
+  beaconHlsFatal,
+  beaconPlaybackError,
+  beaconStall,
+} from '@/lib/error-beacon';
 
 // ── Stream Source Types ──────────────────────────────────────────
 
@@ -34,6 +39,7 @@ interface VideoPlayerProps {
   onBack?: () => void;
   /** Human-readable name of the active provider, e.g. "Internet Archive". */
   sourceLabel?: string;
+  onError?: (err: string) => void;
 }
 
 // ── Stream detection helpers ─────────────────────────────────────
@@ -74,12 +80,15 @@ export default function VideoPlayer({
   initialPosition = 0,
   onBack,
   sourceLabel,
+  onError,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const volumeRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const bufferingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const STALL_MS = 10_000;
   // hls.js instance — typed loosely since hls.js is loaded via dynamic import.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const hlsRef = useRef<any>(null);
@@ -399,12 +408,25 @@ export default function VideoPlayer({
         // Attempt recovery from fatal errors before giving up.
         switch (data.type) {
           case Hls.ErrorTypes.NETWORK_ERROR:
+            beaconHlsFatal(
+              `network: ${data.details ?? 'unknown'}`,
+              sourceLabel || 'hls'
+            );
             hls.startLoad();
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
+            beaconHlsFatal(
+              `media: ${data.details ?? 'unknown'}`,
+              sourceLabel || 'hls'
+            );
             hls.recoverMediaError();
             break;
           default:
+            beaconHlsFatal(
+              `${data.type ?? 'unknown'}: ${data.details ?? 'unknown'}`,
+              sourceLabel || 'hls'
+            );
+            onError?.(`PLAYBACK_HLS_FATAL:${data.details ?? data.type ?? 'unknown'}`);
             hls.destroy();
             hlsRef.current = null;
             break;
@@ -445,10 +467,21 @@ export default function VideoPlayer({
         el.currentTime = initialPosition;
       }
     };
-    const onWaiting = () => setIsBuffering(true);
+    const onWaiting = () => {
+      setIsBuffering(true);
+      if (bufferingTimeoutRef.current) clearTimeout(bufferingTimeoutRef.current);
+      bufferingTimeoutRef.current = setTimeout(() => {
+        beaconStall(STALL_MS, sourceLabel || resolvedType);
+        onError?.('PLAYBACK_STALL');
+      }, STALL_MS);
+    };
     const onPlaying = () => {
       setIsBuffering(false);
       setIsPlaying(true);
+      if (bufferingTimeoutRef.current) {
+        clearTimeout(bufferingTimeoutRef.current);
+        bufferingTimeoutRef.current = null;
+      }
     };
     const onDurationChange = () => {
       if (isFinite(el.duration)) setDuration(el.duration);
@@ -459,6 +492,14 @@ export default function VideoPlayer({
       }
     };
     const onEnded = () => setIsPlaying(false);
+    const onMediaError = () => {
+      const err = el.error;
+      const detail = err
+        ? `${err.code}:${err.message || 'media error'}`
+        : 'unknown media error';
+      beaconPlaybackError(detail, `${sourceLabel || resolvedType}`);
+      onError?.(detail);
+    };
 
     el.addEventListener('play', onPlay);
     el.addEventListener('pause', onPause);
@@ -469,6 +510,7 @@ export default function VideoPlayer({
     el.addEventListener('durationchange', onDurationChange);
     el.addEventListener('progress', onBufferProgress);
     el.addEventListener('ended', onEnded);
+    el.addEventListener('error', onMediaError);
 
     return () => {
       el.removeEventListener('play', onPlay);
@@ -480,9 +522,14 @@ export default function VideoPlayer({
       el.removeEventListener('durationchange', onDurationChange);
       el.removeEventListener('progress', onBufferProgress);
       el.removeEventListener('ended', onEnded);
+      el.removeEventListener('error', onMediaError);
+      if (bufferingTimeoutRef.current) {
+        clearTimeout(bufferingTimeoutRef.current);
+        bufferingTimeoutRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPosition, onProgress, isHls, resolvedSrc]);
+  }, [initialPosition, onProgress, isHls, resolvedSrc, onError, sourceLabel, resolvedType]);
 
   // ── Fullscreen change listener ────────────────────────────────
   useEffect(() => {

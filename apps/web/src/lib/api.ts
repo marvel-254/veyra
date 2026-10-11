@@ -66,6 +66,12 @@ export interface StreamSource {
   type?: StreamType;
   quality?: string;
   label?: string; // e.g. "1080p", "720p", "Auto"
+  /** Unix-seconds expiry of this source URL. Always present; the client can use it
+   *  to decide when to refresh the source list proactively. */
+  exp?: number;
+  /** True when the URL carries a valid HMAC signature (i.e. it was minted by this
+   *  API and its host is R2 or our own origin). Third-party URLs are never signed. */
+  signed?: boolean;
 }
 
 export interface Genre {

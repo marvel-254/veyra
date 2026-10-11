@@ -58,7 +58,7 @@ export default function MovieRow({ title, movies, size = 'md', seeAllHref }: Mov
         {seeAllHref && (
           <a
             href={seeAllHref}
-            className="text-on-surface-variant text-xs font-medium hover:text-white transition-colors"
+            className="text-on-surface-variant text-xs font-medium hover:text-white transition-colors min-h-[48px] inline-flex items-center"
           >
             See All →
           </a>

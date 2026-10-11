@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { Download, Play, Share2, Clock, Calendar, Star, ChevronDown, X, Loader2 } from 'lucide-react';
 import { api, type Movie, type DownloadTask, type DownloadQuality } from '@/lib/api';
+import { saveDownload } from '@/lib/download-store';
 
 type DownloadStatus = 'idle' | 'queued' | 'processing' | 'saving' | 'completed' | 'failed';
 
@@ -80,6 +81,7 @@ export default function MovieDetailClient() {
       if (task.status === 'completed' && task.url) {
         setDownloadStatus('completed');
         triggerDownload(task.url, movie.title);
+        persistDownload(task.url, movie, selectedQuality);
         return;
       }
 
@@ -106,7 +108,10 @@ export default function MovieDetailClient() {
 
         if (task.status === 'completed' && task.url) {
           setDownloadStatus('completed');
-          if (movie) triggerDownload(task.url, movie.title);
+          if (movie) {
+            triggerDownload(task.url, movie.title);
+            persistDownload(task.url, movie, selectedQuality);
+          }
           return;
         }
 
@@ -149,6 +154,40 @@ export default function MovieDetailClient() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  // Persist the completed download into IndexedDB for offline watching.
+  // Best-effort: network fetch failures surface as a non-fatal download error.
+  const persistDownload = async (url: string, item: Movie, quality: string) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const result = await saveDownload(
+        item.id,
+        {
+          title: item.title,
+          posterUrl: item.posterUrl,
+          duration: item.duration,
+          mimeType: blob.type || 'video/mp4',
+        },
+        blob,
+      );
+      if (!result.ok) {
+        // Persist failure must not fail the download itself — the file was
+        // already delivered via triggerDownload. Surface friendly quota text.
+        setDownloadError(
+          result.isQuotaError
+            ? result.error!
+            : `Downloaded, but could not save for offline: ${result.error}`
+        );
+      }
+    } catch (err: any) {
+      // Leave the download itself completed; only note the offline-save miss.
+      setDownloadError(
+        `Downloaded, but could not save for offline: ${err?.message || 'network error'}`
+      );
+    }
   };
 
   const handleShare = () => {
@@ -279,7 +318,7 @@ export default function MovieDetailClient() {
                   <Link
                     key={genre.id}
                     href={`/?genre=${genre.id}`}
-                    className="px-3 py-1.5 bg-white/5 backdrop-blur-sm text-on-surface-variant text-xs font-medium rounded-full border border-white/10 hover:bg-white/10 hover:text-white transition-all"
+                    className="px-3 py-1.5 bg-white/5 backdrop-blur-sm text-on-surface-variant text-xs font-medium rounded-full border border-white/10 hover:bg-white/10 hover:text-white transition-all min-h-[48px] inline-flex items-center"
                   >
                     {genre.name}
                   </Link>
@@ -346,7 +385,7 @@ export default function MovieDetailClient() {
                         e.stopPropagation();
                         setShowQualityPicker(!showQualityPicker);
                       }}
-                      className="absolute right-12 top-1/2 -translate-y-1/2 text-on-tertiary hover:text-on-tertiary/80 transition-colors"
+                      className="absolute right-12 top-1/2 -translate-y-1/2 min-w-[48px] min-h-[48px] flex items-center justify-center text-on-tertiary hover:text-on-tertiary/80 transition-colors"
                       aria-label="Choose quality"
                     >
                       <ChevronDown size={16} />

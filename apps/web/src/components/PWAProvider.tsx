@@ -2,6 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Download, RefreshCw, WifiOff, X } from 'lucide-react';
+import {
+  beaconUnhandledError,
+  beaconUnhandledRejection,
+  flushErrorQueue,
+} from '@/lib/error-beacon';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -41,6 +46,8 @@ export default function PWAProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      // Flush any error events that were queued while offline.
+      flushErrorQueue();
     };
     const handleOffline = () => setIsOnline(false);
 
@@ -48,9 +55,24 @@ export default function PWAProvider({ children }: { children: React.ReactNode })
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // ── Global unhandled-error hooks ──────────────────────────────────
+    const onWindowError: typeof window.onerror = (message, _src, _line, _col, err) => {
+      const detail = err instanceof Error ? err.message : String(message ?? 'unknown');
+      // Filter out Chrome extension noise
+      if (detail.includes('chrome-extension') || detail.includes('moz-extension')) return;
+      beaconUnhandledError(detail, 'window.onerror');
+    };
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      beaconUnhandledRejection(event.reason, 'unhandledrejection');
+    };
+    window.addEventListener('error', onWindowError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('error', onWindowError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
     };
   }, []);
 

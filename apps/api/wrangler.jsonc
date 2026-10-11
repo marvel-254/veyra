@@ -6,12 +6,15 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ENVIRONMENT": "development",
-    "CORS_ORIGIN": "http://localhost:3000,capacitor://localhost,https://localhost",
+    "CORS_ORIGIN": "http://localhost:3000,capacitor://localhost,https://localhost,https://veyra.pages.dev,https://marvel-254.github.io",
     // yt-dlp download service (Render Docker service) — set per-env below
     "YT_DLP_SERVICE_URL": "http://localhost:8000",
     // TMDB Read Access Token — placeholder only. Set the real value via
     // `wrangler secret put TMDB_API_READ_ACCESS_TOKEN`. Never commit the real token.
-    "TMDB_API_READ_ACCESS_TOKEN": "YOUR_TMDB_TOKEN_HERE"
+    "TMDB_API_READ_ACCESS_TOKEN": "YOUR_TMDB_TOKEN_HERE",
+    // URL-signing secret — placeholder only. Set the real value via
+    // `wrangler secret put SIGNING_SECRET`. Never commit the real secret.
+    "SIGNING_SECRET": "REPLACE_WITH_WRANGLER_SECRET"
   },
   // R2 Bucket Binding
   "r2_buckets": [

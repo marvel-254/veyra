@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../lib/db';
 import { movies, mediaFiles } from '../db/schema';
-import { SourceResolver } from '../lib/sources';
+import { SourceResolver, type StreamSource } from '../lib/sources';
+import { authorizeUrl, isOurHost } from '../lib/url-signer';
 import type { Env } from '../index';
 
 const sourcesRouter = new Hono<{ Bindings: Env }>();
@@ -35,8 +36,35 @@ sourcesRouter.get('/search', async (c) => {
 
   const sources = await resolver.resolveSources(lookup);
 
+  // ── Sign our own URLs (R2 / yt-dlp service); leave third-party URLs unsigned ─
+  const trustedHosts = [
+    c.env.R2_PUBLIC_DOMAIN,
+    c.req.header('host') ?? undefined,
+    c.env.YT_DLP_SERVICE_URL ? new URL(c.env.YT_DLP_SERVICE_URL).hostname : undefined,
+  ].filter(Boolean) as string[];
+
+  const expDefault = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
+
+  const signedSources = await Promise.all(
+    sources.map(async (src) => {
+      if (!isOurHost(new URL(src.url).hostname, trustedHosts)) {
+        return { ...src, exp: expDefault, signed: false };
+      }
+      const auth = await authorizeUrl(src.url, { secret: c.env.SIGNING_SECRET, trustedHosts });
+      return { ...src, url: auth.url, exp: auth.exp, signed: auth.signed };
+    })
+  );
+
   return c.json({
-    sources: resolver.sortByPriority(sources),
+    sources: resolver.sortByPriority(signedSources).map((s) => {
+      const src = s as typeof s & { exp: number; signed: boolean };
+      return {
+        ...s,
+        url: src.url,
+        exp: src.exp,
+        signed: src.signed,
+      };
+    }),
     movie: {
       title: query ?? 'Unknown',
       year: year ? parseInt(year) : undefined,
@@ -100,8 +128,39 @@ sourcesRouter.get('/:movieId', async (c) => {
     }
   }
 
+  // ── Sign our own URLs (R2 / yt-dlp service); leave third-party URLs unsigned ─
+  const trustedHosts = [
+    c.env.R2_PUBLIC_DOMAIN,
+    c.req.header('host') ?? undefined,
+    c.env.YT_DLP_SERVICE_URL ? new URL(c.env.YT_DLP_SERVICE_URL).hostname : undefined,
+  ].filter(Boolean) as string[];
+
+  const expDefault = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
+
+  const signedSources = await Promise.all(
+    sources.map(async (src) => {
+      let ours = false;
+      try {
+        ours = isOurHost(new URL(src.url).hostname, trustedHosts);
+      } catch {
+        // Unparseable URL — pass through untouched
+      }
+      if (!ours) return { ...src, exp: expDefault, signed: false };
+      const auth = await authorizeUrl(src.url, { secret: c.env.SIGNING_SECRET, trustedHosts });
+      return { ...src, url: auth.url, exp: auth.exp, signed: auth.signed };
+    })
+  );
+
   return c.json({
-    sources: resolver.sortByPriority(sources),
+    sources: resolver.sortByPriority(signedSources).map((s) => {
+      const src = s as typeof s & { exp: number; signed: boolean };
+      return {
+        ...s,
+        url: src.url,
+        exp: src.exp,
+        signed: src.signed,
+      };
+    }),
     movie: {
       id: movie.id,
       title: movie.title,

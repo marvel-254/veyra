@@ -30,7 +30,7 @@ export default function Footer() {
         <div className="mb-10">
           <Link
             href="/"
-            className="text-primary font-black text-3xl italic tracking-[-0.04em]"
+            className="text-primary font-black text-3xl italic tracking-[-0.04em] min-h-[48px] inline-flex items-center"
           >
             Veyra
           </Link>
@@ -51,7 +51,7 @@ export default function Footer() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-on-surface-variant text-sm hover:text-white transition-colors duration-200"
+                      className="text-on-surface-variant text-sm hover:text-white transition-colors duration-200 min-h-[48px] inline-flex items-center"
                     >
                       {link.label}
                     </Link>

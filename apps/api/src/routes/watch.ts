@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { getDb } from '../lib/db';
 import { movies, mediaFiles } from '../db/schema';
 import { SourceResolver, type StreamSource } from '../lib/sources';
+import { authorizeUrl, isOurHost } from '../lib/url-signer';
 import type { AppContext } from '../index';
 
 const watch = new Hono<AppContext>();
@@ -167,10 +168,40 @@ watch.get('/streaming-url/:movieId', async (c) => {
     }
   }
 
-  // Pick the best source
-  const best = resolver.bestSource(allSources);
+  // ── Separate and sign ──────────────────────────────────────────────────────
+  // Sources we control (R2, yt-dlp service) get HMAC-signed. External URLs
+  // (archive.org, YouTube, …) are passed through with exp metadata only.
+  const trustedHosts = [
+    c.env.R2_PUBLIC_DOMAIN,
+    c.req.header('host') ?? undefined,
+    c.env.YT_DLP_SERVICE_URL ? new URL(c.env.YT_DLP_SERVICE_URL).hostname : undefined,
+  ].filter(Boolean) as string[];
 
-  if (!best) {
+  const [ours, external] = allSources.reduce<[StreamSource[], StreamSource[]]>(
+    ([yes, no], src) => {
+      try { isOurHost(new URL(src.url).hostname, trustedHosts) ? yes.push(src) : no.push(src); }
+      catch { no.push(src); }
+      return [yes, no];
+    },
+    [[], []]
+  );
+
+  const signedOurs = await Promise.all(
+    ours.map((src) => authorizeUrl(src.url, { secret: c.env.SIGNING_SECRET, trustedHosts }))
+  );
+  const expDefault = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
+
+  const tagged = (src: StreamSource, i: number): StreamSource & { exp: number; signed: boolean } =>
+    i < signedOurs.length
+      ? { ...src, url: signedOurs[i].url, exp: signedOurs[i].exp, signed: signedOurs[i].signed }
+      : { ...src, exp: expDefault, signed: false };
+
+  const signedSources: (StreamSource & { exp: number; signed: boolean })[] = [
+    ...ours.map(tagged),
+    ...external.map((src) => ({ ...src, exp: expDefault, signed: false })),
+  ];
+
+  if (signedSources.length === 0) {
     return c.json({
       error: 'No stream sources found for this movie. It may not be locally uploaded and no external sources are available.',
       code: 'NO_SOURCES_FOUND',
@@ -179,20 +210,40 @@ watch.get('/streaming-url/:movieId', async (c) => {
     }, 404);
   }
 
+  // Pick best AFTER signing so the selected URL is the one the client will actually use
+  const best = resolver.bestSource(signedSources);
+
   // Increment view count
   await db
     .update(movies)
     .set({ viewCount: (movie.viewCount || 0) + 1 })
     .where(eq(movies.id, movieId));
 
+  // signedBest === best (same array); naming makes the response fields clear
+  const signedBest = best as StreamSource & { exp: number; signed: boolean };
+
   return c.json({
     movieId,
-    quality: best.quality,
-    streamingUrl: best.url,
-    type: best.type,
-    source: best.source,
-    label: best.label,
-    allSources: resolver.sortByPriority(allSources),
+    quality: signedBest.quality,
+    streamingUrl: signedBest.url,
+    exp: signedBest.exp,
+    signed: signedBest.signed,
+    type: signedBest.type,
+    source: signedBest.source,
+    label: signedBest.label,
+    allSources: resolver.sortByPriority(signedSources).map((s) => {
+      const src = s as StreamSource & { exp: number; signed: boolean };
+      return {
+        url: src.url,
+        exp: src.exp,
+        signed: src.signed,
+        type: src.type,
+        quality: src.quality,
+        label: src.label,
+        source: src.source,
+        title: src.title,
+      };
+    }),
   });
 });
 

@@ -108,7 +108,7 @@ export default function Hero({ movie }: HeroProps) {
               <Link
                 key={g.id}
                 href={`/?genre=${g.id}`}
-                className="px-3 py-1 bg-white/5 backdrop-blur-sm text-on-surface-variant text-xs font-medium rounded-full border border-white/10 hover:bg-white/10 hover:text-white transition-all"
+                className="px-3 py-1 bg-white/5 backdrop-blur-sm text-on-surface-variant text-xs font-medium rounded-full border border-white/10 hover:bg-white/10 hover:text-white transition-all min-h-[48px] inline-flex items-center"
               >
                 {g.name}
               </Link>

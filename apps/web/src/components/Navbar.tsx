@@ -10,6 +10,7 @@ const navLinks = [
   { href: '/?type=movie', label: 'Movies' },
   { href: '/?type=series', label: 'Series' },
   { href: '/browse', label: 'Browse' },
+  { href: '/downloads', label: 'Downloads' },
 ];
 
 export default function Navbar() {
@@ -53,7 +54,7 @@ export default function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`relative px-3 py-2 text-sm font-medium transition-colors duration-200 rounded-lg ${
+                  className={`relative inline-flex items-center min-h-[48px] px-3 py-2 text-sm font-medium transition-colors duration-200 rounded-lg ${
                     isActive(link.href)
                       ? 'text-white'
                       : 'text-on-surface-variant hover:text-white'
@@ -68,7 +69,7 @@ export default function Navbar() {
               ))}
               <Link
                 href="/search"
-                className={`relative px-3 py-2 text-sm font-medium transition-colors duration-200 rounded-lg ${
+                className={`relative inline-flex items-center min-h-[48px] px-3 py-2 text-sm font-medium transition-colors duration-200 rounded-lg ${
                   pathname === '/search'
                     ? 'text-white'
                     : 'text-on-surface-variant hover:text-white'
@@ -87,7 +88,7 @@ export default function Navbar() {
             {/* Search icon (mobile) */}
             <Link
               href="/search"
-              className="md:hidden w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-white hover:bg-white/10 transition-all"
+              className="md:hidden min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center text-on-surface-variant hover:text-white hover:bg-white/10 transition-all"
               aria-label="Search"
             >
               <Search size={18} />
@@ -95,7 +96,7 @@ export default function Navbar() {
 
             {/* Mobile menu toggle */}
             <button
-              className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:text-white hover:bg-white/10 transition-all"
+              className="min-w-[48px] min-h-[48px] rounded-full flex items-center justify-center text-on-surface-variant hover:text-white hover:bg-white/10 transition-all"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle menu"
             >
@@ -113,7 +114,7 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
+                className={`py-2.5 px-3 rounded-lg text-sm font-medium transition-colors min-h-[48px] inline-flex items-center ${
                   isActive(link.href)
                     ? 'text-white bg-white/5'
                     : 'text-on-surface-variant hover:text-white hover:bg-white/5'
@@ -125,7 +126,7 @@ export default function Navbar() {
             ))}
             <Link
               href="/search"
-              className={`py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
+              className={`py-2.5 px-3 rounded-lg text-sm font-medium transition-colors min-h-[48px] inline-flex items-center ${
                 pathname === '/search'
                   ? 'text-white bg-white/5'
                   : 'text-on-surface-variant hover:text-white hover:bg-white/5'
