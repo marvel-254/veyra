@@ -49,3 +49,15 @@ drizzle/meta/
 
 # TypeScript
 *.tsbuildinfo
+
+# Capacitor / Android
+apps/web/android/.gradle/
+apps/web/android/app/build/
+apps/web/android/build/
+apps/web/android/local.properties
+apps/web/android/captures/
+apps/web/android/.idea/
+*.apk
+*.aab
+*.keystore
+!apps/web/android/app/release/
