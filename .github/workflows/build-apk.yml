@@ -41,7 +41,9 @@ jobs:
       - name: Build web app
         run: npm run build --workspace=apps/web
         env:
-          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://veyra-api.workers.dev' }}
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'https://veyra-api-production.kipkiruigideon890.workers.dev' }}
+          # Never silently fall back to in-browser mock data in shipped builds.
+          NEXT_PUBLIC_MOCK_API: 'false'
 
       - name: Verify static export output
         run: |
