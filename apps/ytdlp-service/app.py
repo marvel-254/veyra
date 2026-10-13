@@ -291,18 +291,42 @@ async def list_qualities():
 
 @app.post("/qualities")
 async def preview_qualities(req: DownloadRequest):
-    """Return quality options for a given URL (yt-dlp dry-run for format info)."""
+    """Return quality options for a given URL (run yt-dlp to list formats)."""
     if not is_valid_youtube_url(req.url):
         raise HTTPException(400, "Invalid YouTube URL")
 
-    # For v1, always return standard options. In v2, run `yt-dlp --list-formats` to show real options.
-    return JSONResponse({
-        "qualities": [
-            {"label": "1080p", "value": "1080p", "sizeEstimate": "~1.2 GB"},
-            {"label": "720p",  "value": "720p",  "sizeEstimate": "~650 MB"},
-            {"label": "480p",  "value": "480p",  "sizeEstimate": "~350 MB"},
-        ]
-    })
+    # Run yt-dlp to get available formats
+    cmd = ["yt-dlp", "-J", req.url]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            raise HTTPException(500, "Failed to fetch formats from YouTube")
+        
+        import json
+        data = json.loads(result.stdout)
+        formats = data.get("formats", [])
+        
+        available_qualities = []
+        seen_heights = set()
+        
+        # Heuristic to map formats to labels
+        for fmt in formats:
+            height = fmt.get("height")
+            if height and height not in seen_heights:
+                seen_heights.add(height)
+                available_qualities.append({
+                    "label": f"{height}p",
+                    "value": f"{height}p",
+                    "sizeEstimate": "Varies"
+                })
+        
+        # Sort by resolution descending
+        available_qualities.sort(key=lambda x: int(x["value"].replace("p", "")), reverse=True)
+        
+        return JSONResponse({"qualities": available_qualities})
+        
+    except Exception as e:
+        raise HTTPException(500, f"Error processing qualities: {str(e)}")
 
 
 # ── Run locally ──────────────────────────────────────────────────────────────
