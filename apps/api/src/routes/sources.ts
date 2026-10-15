@@ -35,11 +35,10 @@ sourcesRouter.get('/search', async (c) => {
 
   const sources = await resolver.resolveSources(lookup);
 
-  // ── Sign our own URLs (R2 / yt-dlp service); leave third-party URLs unsigned ─
+  // ── Sign our own URLs (R2 only); leave third-party URLs unsigned ────────────
   const trustedHosts = [
     c.env.R2_PUBLIC_DOMAIN,
     c.req.header('host') ?? undefined,
-    c.env.YT_DLP_SERVICE_URL ? new URL(c.env.YT_DLP_SERVICE_URL).hostname : undefined,
   ].filter(Boolean) as string[];
 
   const expDefault = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
@@ -126,11 +125,10 @@ sourcesRouter.get('/:movieId', async (c) => {
     }
   }
 
-  // ── Sign our own URLs (R2 / yt-dlp service); leave third-party URLs unsigned ─
+  // ── Sign our own URLs (R2 only); leave third-party URLs unsigned ────────────
   const trustedHosts = [
     c.env.R2_PUBLIC_DOMAIN,
     c.req.header('host') ?? undefined,
-    c.env.YT_DLP_SERVICE_URL ? new URL(c.env.YT_DLP_SERVICE_URL).hostname : undefined,
   ].filter(Boolean) as string[];
 
   const expDefault = Math.floor(Date.now() / 1000) + 2 * 60 * 60;

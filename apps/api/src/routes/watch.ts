@@ -45,7 +45,7 @@ watch.get('/streaming-url/:movieId', async (c) => {
   };
 
   // Resolve all external sources concurrently
-  const [archiveSources, tmdbSources, ytdlpSources] = await Promise.all([
+  const [archiveSources, tmdbSources] = await Promise.all([
     // Internet Archive
     (async () => {
       if (preferSource && preferSource !== 'Archive') return [];
@@ -103,42 +103,11 @@ watch.get('/streaming-url/:movieId', async (c) => {
           } catch { return []; }
         })()
       : Promise.resolve([]),
-    // yt-dlp — we need the YouTube URL from TMDB first, so handle inline below
-    Promise.resolve<StreamSource[]>([]),
   ]);
-
-  // yt-dlp: use the best YouTube URL found above
-  const youtubeUrl = tmdbSources.find((s) => s.type === 'youtube')?.url;
-  let ytdlpResolved: StreamSource[] = [];
-  if (youtubeUrl && c.env.YT_DLP_SERVICE_URL && (!preferSource || preferSource === 'yt-dlp')) {
-    try {
-      const res = await fetch(`${c.env.YT_DLP_SERVICE_URL}/download`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: youtubeUrl }),
-        signal: AbortSignal.timeout(15000),
-      });
-      if (res.ok) {
-        const data = await res.json() as { url?: string; directUrl?: string };
-        const directUrl = data.url ?? data.directUrl;
-        if (directUrl) {
-          const isHLS = directUrl.includes('.m3u8');
-          ytdlpResolved = [{
-            url: directUrl,
-            type: isHLS ? 'hls' : 'mp4',
-            quality: 'best',
-            label: isHLS ? 'Auto (HLS)' : 'Best Available',
-            source: 'yt-dlp',
-          }];
-        }
-      }
-    } catch { /* ignore yt-dlp failures */ }
-  }
 
   // Collect all sources
   const allSources: StreamSource[] = [
     ...archiveSources,
-    ...ytdlpResolved,
     ...tmdbSources.filter((s) => s.type === 'youtube'), // only YouTube trailers
   ];
 
@@ -168,12 +137,11 @@ watch.get('/streaming-url/:movieId', async (c) => {
   }
 
   // ── Separate and sign ──────────────────────────────────────────────────────
-  // Sources we control (R2, yt-dlp service) get HMAC-signed. External URLs
-  // (archive.org, YouTube, …) are passed through with exp metadata only.
+  // Sources we control (R2) get HMAC-signed. External URLs (archive.org,
+  // YouTube, free providers) are passed through with exp metadata only.
   const trustedHosts = [
     c.env.R2_PUBLIC_DOMAIN,
     c.req.header('host') ?? undefined,
-    c.env.YT_DLP_SERVICE_URL ? new URL(c.env.YT_DLP_SERVICE_URL).hostname : undefined,
   ].filter(Boolean) as string[];
 
   const [ours, external] = allSources.reduce<[StreamSource[], StreamSource[]]>(

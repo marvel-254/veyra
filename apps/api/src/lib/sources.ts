@@ -1,8 +1,8 @@
 // Source Resolver — queries multiple free/online streaming sources concurrently.
 // All sources are read-only; no upload or write operations.
 
-export type StreamSourceType = 'hls' | 'mp4' | 'youtube' | 'dash';
-export type StreamSourceProvider = 'YouTube' | 'TMDB' | 'Archive' | 'yt-dlp' | 'R2';
+export type StreamSourceType = 'hls' | 'mp4' | 'youtube' | 'dash' | 'iframe';
+export type StreamSourceProvider = 'YouTube' | 'TMDB' | 'Archive' | 'yt-dlp' | 'R2' | 'Tubi' | 'Plex' | 'PlutoTV' | 'FreeProviders';
 
 export interface StreamSource {
   url: string;
@@ -163,9 +163,6 @@ async function resolveTMDB(tmdbId: number, token: string): Promise<StreamSource[
 //
 // TMDB's watch/providers is a sanctioned, rate-limit-friendly endpoint — no
 // scraping, no API key needed beyond the bearer token we already have.
-
-export type StreamSourceType = 'hls' | 'mp4' | 'youtube' | 'dash' | 'iframe';
-export type StreamSourceProvider = 'YouTube' | 'TMDB' | 'Archive' | 'yt-dlp' | 'R2' | 'Tubi' | 'Plex' | 'PlutoTV' | 'FreeProviders';
 
 export interface FreeProvider {
   provider: string;
@@ -391,7 +388,7 @@ export class SourceResolver {
         )
       : [];
 
-    return [...archiveSources, ...freeSources, ...tmdbSources, ...ytdlpSources, ...r2Sources];
+    return [...archiveSources, ...freeSources, ...tmdbSources, ...r2Sources];
   }
 
   /**
