@@ -170,6 +170,19 @@ export interface FreeProvider {
   display_priority: number;
 }
 
+// List of known free/ad-supported providers we explicitly support
+const FREE_PROVIDER_PATTERNS = [
+  'tubi', 'pluto', 'freevee', 'amazon freevee', 'crackle', 'plex',
+  'youtube movies', 'youtube free', 'imdb tv', 'roktv',
+  'hoichoi', 'sun NXT', 'zee5', 'altbalaji', 'mx player',
+  'jiocinema', 'hotstar', 'sonyliv', 'veetv', 'mubi',
+];
+
+function isFreeProvider(name: string): boolean {
+  const n = name.toLowerCase();
+  return FREE_PROVIDER_PATTERNS.some(p => n.includes(p));
+}
+
 // TMDB watch/providers returns flatrate (ads), ads (ad-supported, non-flatrate),
 // rent (paid), buy (paid). We surface flatrate + ads as free.
 async function resolveFreeProviders(tmdbId: number, tmdbToken: string): Promise<StreamSource[]> {
@@ -194,31 +207,56 @@ async function resolveFreeProviders(tmdbId: number, tmdbToken: string): Promise<
     };
 
     const results = data.results ?? {};
-    // Prefer US; fall back to first available country
-    const country = results['US'] ?? Object.values(results)[0];
-    if (!country) return [];
+    if (Object.keys(results).length === 0) return [];
 
-    const allProviders = [
-      ...(country.flatrate ?? []),
-      ...(country.ads ?? []),
-    ];
+    // Collect from all countries, preferring US/GB/CA/AU first
+    const countryOrder = ['US', 'GB', 'CA', 'AU', 'DE', 'FR', 'JP', 'IN', 'BR', 'MX'];
+    const allProviders: Array<{ provider: FreeProvider; country: string }> = [];
+
+    // First pass: preferred countries with free providers
+    for (const country of countryOrder) {
+      const countryData = results[country];
+      if (!countryData) continue;
+
+      const freeFromCountry = [
+        ...(countryData.flatrate ?? []).filter(p => isFreeProvider(p.provider)),
+        ...(countryData.ads ?? []).filter(p => isFreeProvider(p.provider)),
+      ];
+
+      if (freeFromCountry.length > 0) {
+        allProviders.push(...freeFromCountry.map(p => ({ provider: p, country })));
+      }
+    }
+
+    // Fallback: any provider from any country
+    if (allProviders.length === 0) {
+      for (const [country, countryData] of Object.entries(results)) {
+        for (const p of countryData.flatrate ?? []) {
+          allProviders.push({ provider: p, country });
+        }
+        for (const p of countryData.ads ?? []) {
+          allProviders.push({ provider: p, country });
+        }
+      }
+    }
 
     if (allProviders.length === 0) return [];
 
-    // Sort by TMDB display_priority (lower = higher quality provider)
-    allProviders.sort((a, b) => a.display_priority - b.display_priority);
+    // Sort by display_priority (lower = higher quality)
+    allProviders.sort((a, b) => a.provider.display_priority - b.provider.display_priority);
 
     const sources: StreamSource[] = [];
+    const seen = new Set<string>();
 
-    for (const provider of allProviders) {
-      if (!provider.link) continue;
+    for (const { provider, country } of allProviders.slice(0, 10)) {
+      if (!provider.link || seen.has(provider.link)) continue;
+      seen.add(provider.link);
 
-      // iframe type for provider landing pages — VideoPlayer handles these
       sources.push({
         url: provider.link,
         type: 'iframe',
         quality: 'web',
-        label: getProviderLabel(provider.provider),
+        label: getProviderLabel(provider.provider, country),
         source: getProviderSource(provider.provider),
       });
     }
@@ -229,18 +267,25 @@ async function resolveFreeProviders(tmdbId: number, tmdbToken: string): Promise<
   }
 }
 
-function getProviderLabel(name: string): string {
+function getProviderLabel(name: string, country: string = ''): string {
+  const prefix = country ? `[${country}] ` : '';
   const labels: Record<string, string> = {
-    'Tubi TV': 'Watch on Tubi (free, ad-supported)',
-    'Pluto TV': 'Watch on Pluto TV (free, ad-supported)',
-    'Freevee': 'Watch on Freevee (free, ad-supported)',
-    'Plex': 'Watch on Plex (free, ad-supported)',
-    ' Peacock': 'Watch on Peacock (free, ad-supported)',
-    ' Crackle': 'Watch on Crackle (free)',
-    ' IMDb TV': 'Watch on IMDb TV (free, ad-supported)',
-    ' Tubi': 'Watch on Tubi (free, ad-supported)',
+    'Tubi': `${prefix}Watch on Tubi (free, ad-supported)`,
+    'Pluto TV': `${prefix}Watch on Pluto TV (free, ad-supported)`,
+    'Freevee': `${prefix}Watch on Freevee (free, ad-supported)`,
+    'Plex': `${prefix}Watch on Plex (free, ad-supported)`,
+    'Crackle': `${prefix}Watch on Crackle (free)`,
+    'IMDb TV': `${prefix}Watch on IMDb TV (free, ad-supported)`,
+    'YouTube Movies': `${prefix}Watch on YouTube (free)`,
+    'Peacock': `${prefix}Watch on Peacock (subscription)`,
+    'Netflix': `${prefix}Watch on Netflix (subscription)`,
+    'Amazon Prime Video': `${prefix}Watch on Prime Video (subscription)`,
+    'Disney Plus': `${prefix}Watch on Disney+ (subscription)`,
+    'Hulu': `${prefix}Watch on Hulu (subscription)`,
+    'Apple TV': `${prefix}Rent/Buy on Apple TV`,
+    'Google Play Movies': `${prefix}Rent/Buy on Google Play`,
   };
-  return labels[name] ?? `Watch on ${name}`;
+  return labels[name] ?? `${prefix}Watch on ${name}`;
 }
 
 function getProviderSource(name: string): StreamSourceProvider {
@@ -248,6 +293,9 @@ function getProviderSource(name: string): StreamSourceProvider {
   if (n.includes('tubi')) return 'Tubi';
   if (n.includes('plex')) return 'Plex';
   if (n.includes('pluto')) return 'PlutoTV';
+  if (n.includes('freevee') || n.includes('amazon')) return 'Freevee';
+  if (n.includes('youtube')) return 'YouTube';
+  if (n.includes('crackle')) return 'Crackle';
   return 'FreeProviders';
 }
 
