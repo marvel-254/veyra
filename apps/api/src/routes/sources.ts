@@ -24,7 +24,6 @@ sourcesRouter.get('/search', async (c) => {
 
   const resolver = new SourceResolver(
     c.env.TMDB_API_READ_ACCESS_TOKEN ?? '',
-    c.env.YT_DLP_SERVICE_URL ?? '',
     c.env.R2_PUBLIC_DOMAIN
   );
 
@@ -86,7 +85,6 @@ sourcesRouter.get('/:movieId', async (c) => {
 
   const resolver = new SourceResolver(
     c.env.TMDB_API_READ_ACCESS_TOKEN ?? '',
-    c.env.YT_DLP_SERVICE_URL ?? '',
     c.env.R2_PUBLIC_DOMAIN
   );
 

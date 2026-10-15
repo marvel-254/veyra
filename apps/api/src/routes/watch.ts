@@ -33,7 +33,6 @@ watch.get('/streaming-url/:movieId', async (c) => {
   // Build resolver and lookup
   const resolver = new SourceResolver(
     c.env.TMDB_API_READ_ACCESS_TOKEN ?? '',
-    c.env.YT_DLP_SERVICE_URL ?? '',
     c.env.R2_PUBLIC_DOMAIN
   );
 

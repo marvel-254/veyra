@@ -154,6 +154,106 @@ async function resolveTMDB(tmdbId: number, token: string): Promise<StreamSource[
   }
 }
 
+// ── Free / ad-supported providers via TMDB official watch/providers ─────────
+//
+// TMDB exposes official free streaming links through /movie/{id}/watch/providers.
+// The flatrate list = ad-supported tiers (Tubi, Pluto TV, Freevee/Amazon Freevee,
+// Plex, etc.). We query it server-side, sort by quality (HLS/MP4 direct links
+// over iframe embeds), and surface clean deep-links the VideoPlayer can open.
+//
+// TMDB's watch/providers is a sanctioned, rate-limit-friendly endpoint — no
+// scraping, no API key needed beyond the bearer token we already have.
+
+export type StreamSourceType = 'hls' | 'mp4' | 'youtube' | 'dash' | 'iframe';
+export type StreamSourceProvider = 'YouTube' | 'TMDB' | 'Archive' | 'yt-dlp' | 'R2' | 'Tubi' | 'Plex' | 'PlutoTV' | 'FreeProviders';
+
+export interface FreeProvider {
+  provider: string;
+  link: string;
+  display_priority: number;
+}
+
+// TMDB watch/providers returns flatrate (ads), ads (ad-supported, non-flatrate),
+// rent (paid), buy (paid). We surface flatrate + ads as free.
+async function resolveFreeProviders(tmdbId: number, tmdbToken: string): Promise<StreamSource[]> {
+  try {
+    const res = await fetch(
+      `https://api.themoviedb.org/3/movie/${tmdbId}/watch/providers`,
+      {
+        headers: { Authorization: `Bearer ${tmdbToken}` },
+        signal: AbortSignal.timeout(8000),
+      }
+    );
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as {
+      results?: {
+        [country: string]: {
+          flatrate?: FreeProvider[];
+          ads?: FreeProvider[];
+          link?: string;
+        };
+      };
+    };
+
+    const results = data.results ?? {};
+    // Prefer US; fall back to first available country
+    const country = results['US'] ?? Object.values(results)[0];
+    if (!country) return [];
+
+    const allProviders = [
+      ...(country.flatrate ?? []),
+      ...(country.ads ?? []),
+    ];
+
+    if (allProviders.length === 0) return [];
+
+    // Sort by TMDB display_priority (lower = higher quality provider)
+    allProviders.sort((a, b) => a.display_priority - b.display_priority);
+
+    const sources: StreamSource[] = [];
+
+    for (const provider of allProviders) {
+      if (!provider.link) continue;
+
+      // iframe type for provider landing pages — VideoPlayer handles these
+      sources.push({
+        url: provider.link,
+        type: 'iframe',
+        quality: 'web',
+        label: getProviderLabel(provider.provider),
+        source: getProviderSource(provider.provider),
+      });
+    }
+
+    return sources;
+  } catch {
+    return [];
+  }
+}
+
+function getProviderLabel(name: string): string {
+  const labels: Record<string, string> = {
+    'Tubi TV': 'Watch on Tubi (free, ad-supported)',
+    'Pluto TV': 'Watch on Pluto TV (free, ad-supported)',
+    'Freevee': 'Watch on Freevee (free, ad-supported)',
+    'Plex': 'Watch on Plex (free, ad-supported)',
+    ' Peacock': 'Watch on Peacock (free, ad-supported)',
+    ' Crackle': 'Watch on Crackle (free)',
+    ' IMDb TV': 'Watch on IMDb TV (free, ad-supported)',
+    ' Tubi': 'Watch on Tubi (free, ad-supported)',
+  };
+  return labels[name] ?? `Watch on ${name}`;
+}
+
+function getProviderSource(name: string): StreamSourceProvider {
+  const n = name.toLowerCase();
+  if (n.includes('tubi')) return 'Tubi';
+  if (n.includes('plex')) return 'Plex';
+  if (n.includes('pluto')) return 'PlutoTV';
+  return 'FreeProviders';
+}
+
 // ── yt-dlp service resolver ──────────────────────────────────────
 
 async function resolveYtdlp(youtubeUrl: string, serviceUrl: string): Promise<StreamSource[]> {
@@ -245,12 +345,10 @@ function resolveR2(media: R2MediaInfo, publicDomain?: string): StreamSource[] {
 
 export class SourceResolver {
   private tmdbToken: string;
-  private ytdlpServiceUrl: string;
   private r2PublicDomain?: string;
 
-  constructor(tmdbToken: string, ytdlpServiceUrl: string, r2PublicDomain?: string) {
+  constructor(tmdbToken: string, r2PublicDomain?: string) {
     this.tmdbToken = tmdbToken;
-    this.ytdlpServiceUrl = ytdlpServiceUrl;
     this.r2PublicDomain = r2PublicDomain;
   }
 
@@ -279,14 +377,13 @@ export class SourceResolver {
     const tmdbSources: StreamSource[] =
       tmdbResult.status === 'fulfilled' ? tmdbResult.value : [];
 
-    // ── Stage 2: yt-dlp, which needs the YouTube URL from stage 1 ──
-    const ytUrl = tmdbSources.find((s) => s.type === 'youtube')?.url;
-    const ytdlpSources: StreamSource[] =
-      ytUrl && this.ytdlpServiceUrl
-        ? await resolveYtdlp(ytUrl, this.ytdlpServiceUrl).catch(() => [])
-        : [];
+    // ── Stage 2: free ad-supported providers via TMDB watch/providers ─────────
+    const freeProvidersResult = movie.tmdbId
+      ? await resolveFreeProviders(movie.tmdbId, this.tmdbToken).catch(() => [])
+      : [];
+    const freeSources: StreamSource[] = freeProvidersResult;
 
-    // ── Local R2 source for uploaded content ────────────────────
+    // ── Stage 3: Local R2 source for uploaded content ────────────────────
     const r2Sources: StreamSource[] = movie.localPath
       ? resolveR2(
           { objectPath: movie.localPath, quality: '1080', publicUrl: undefined },
@@ -294,7 +391,7 @@ export class SourceResolver {
         )
       : [];
 
-    return [...archiveSources, ...tmdbSources, ...ytdlpSources, ...r2Sources];
+    return [...archiveSources, ...freeSources, ...tmdbSources, ...ytdlpSources, ...r2Sources];
   }
 
   /**
@@ -307,6 +404,7 @@ export class SourceResolver {
       mp4: 1,
       dash: 2,
       youtube: 3,
+      iframe: 4, // free provider landing pages — last resort for streaming
     };
 
     return [...sources].sort((a, b) => {
